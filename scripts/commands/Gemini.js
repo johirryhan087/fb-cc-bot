@@ -20,32 +20,56 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 let autoReplyEnabled = false;
 
+// 🔥 কনভারসেশন হিস্টোরি এখানে থাকবে (বট রিস্টার্ট হলে রিসেট হবে)
+// প্রতিটি কথোপকথন একটি অবজেক্ট হিসেবে থাকবে: { role: "user" | "assistant", content: "message" }
+let conversationHistory = [];
+const MAX_HISTORY_TURNS = 5; // শেষ 5টি user-assistant টার্ন মনে রাখবে
+
 async function askGemini(userPrompt) {
     try {
         const model = genAI.getGenerativeModel({
             // 🔁 লক্ষ্য করো — এখানে মডেলের নাম আপডেট করা হয়েছে
             // 'models/gemini-pro' এর বদলে 'gemini-1.5-flash' ব্যবহার করা হয়েছে।
             // তুমি চাইলে 'gemini-1.5-pro' ও ব্যবহার করতে পারো যদি উন্নত মানের উত্তর দরকার হয়।
-            model: "gemini-1.5-flash" 
+            model: "gemini-1.5-flash"
         });
 
+        // Gemini API তে পাঠানোর জন্য মেসেজগুলোকে সঠিক ফরম্যাটে সাজানো
+        const messagesToSend = conversationHistory.map(entry => ({
+            role: entry.role === "user" ? "user" : "model", // Gemini API 'model' role ব্যবহার করে
+            parts: [{ text: entry.content }]
+        }));
+
+        // ইউজার প্রম্পট যোগ করা
+        messagesToSend.push({ role: "user", parts: [{ text: userPrompt }] });
+
+
         const chat = model.startChat({
-            history: [],
+            history: messagesToSend, // কনভারসেশন হিস্টোরি এখানে পাঠানো হচ্ছে
             generationConfig: {
                 maxOutputTokens: 2048,
             },
         });
 
-        const friendlyPrompt = `সে একজন হট এন্ড সেক্সি মেয়ে, বুদ্ধিমতী, তবে মাঝে মাঝে একটু বোকামি করা মেয়ে। । নতুন বন্ধু বানাতে সে পছন্দ করে এবং সবসময় কার্যকরী পরামর্শ দেয়, তবে মাঝে মাঝে ভুল তথ্যও দিতে পারে। সমস্যা সমাধানে সে এক্সপার্ট সব সময় বাংলাতেই কথা বলে এবং সবাইকে তুমি বলে সম্বোধন করে
-
-👉 প্রশ্ন: ${userPrompt}`;
-        const result = await chat.sendMessage(friendlyPrompt);
+        const result = await chat.sendMessage(userPrompt); // এখানে শুধু userPrompt পাঠানো হচ্ছে কারণ history উপরে startChat এ সেট করা হয়েছে
         const response = await result.response;
-        return response.text();
+        const replyText = response.text();
+
+        // 📝 কনভারসেশন হিস্টোরি আপডেট করা
+        conversationHistory.push({ role: "user", content: userPrompt });
+        conversationHistory.push({ role: "assistant", content: replyText });
+
+        // হিস্টোরি একটি নির্দিষ্ট দৈর্ঘ্যে সীমাবদ্ধ রাখা (যাতে খুব বেশি বড় না হয়)
+        // প্রতিটি টার্ন (user + assistant) দুইটি মেসেজ, তাই MAX_HISTORY_TURNS * 2
+        if (conversationHistory.length > MAX_HISTORY_TURNS * 2) {
+            conversationHistory = conversationHistory.slice(conversationHistory.length - MAX_HISTORY_TURNS * 2);
+        }
+
+        return replyText;
     } catch (error) {
         console.error("Gemini API Error:", error);
-        // Better error message for the user, indicating it's an internal bot issue
-        return "❌ Gemini API তে সমস্যা হয়েছে। আমি দুঃখিত, বন্ধু। পরে আবার চেষ্টা করো।";
+        // ব্যবহারকারীকে আরও তথ্যবহুল মেসেজ দেওয়া হয়েছে
+        return "❌ Gemini API তে সমস্যা হয়েছে। আমি দুঃখিত, বন্ধু। পরে আবার চেষ্টা করো।";
     }
 }
 
@@ -55,7 +79,6 @@ module.exports.run = async function ({ api, event, args }) {
     if (!input) {
         return api.sendMessage(
             "🧠 Gemini ব্যবহারের জন্য কিছু লিখুন। যেমন:\n/gemini Explain Quantum Physics",
-
             event.threadID,
             event.messageID
         );
@@ -63,15 +86,15 @@ module.exports.run = async function ({ api, event, args }) {
 
     if (input.toLowerCase() === "on") { // Added .toLowerCase() for robustness
         autoReplyEnabled = true;
-        return api.sendMessage("✅ Auto Gemini reply চালু হয়েছে।", event.threadID, event.messageID);
+        return api.sendMessage("✅ Auto Gemini reply চালু হয়েছে।", event.threadID, event.messageID);
     }
 
     if (input.toLowerCase() === "off") { // Added .toLowerCase() for robustness
         autoReplyEnabled = false;
-        return api.sendMessage("❌ Auto Gemini reply বন্ধ হয়েছে।", event.threadID, event.messageID);
+        return api.sendMessage("❌ Auto Gemini reply বন্ধ হয়েছে।", event.threadID, event.messageID);
     }
 
-    // Indicate that the bot is processing the request
+    // বট প্রসেস করছে নির্দেশ করে
     api.sendMessage("🤖 Gemini তোমার প্রশ্নের উত্তর খুঁজছে...", event.threadID);
 
     const reply = await askGemini(input);
@@ -81,16 +104,15 @@ module.exports.run = async function ({ api, event, args }) {
 // 💬 অটো রেসপন্ডার
 module.exports.handleEvent = async function ({ api, event }) {
     if (!autoReplyEnabled) return;
-    if (event.senderID == api.getCurrentUserID()) return; // Prevent bot from replying to itself
-    if (!event.body || event.body.length < 2) return; // Ignore very short or empty messages
+    if (event.senderID == api.getCurrentUserID()) return; // বট যেন নিজের মেসেজের উত্তর না দেয়
+    if (!event.body || event.body.length < 2) return; // খুব ছোট বা খালি মেসেজ ইগনোর করা
 
-    // Ignore commands so auto-reply doesn't trigger on '/gemini on' etc.
+    // কমান্ডগুলো ইগনোর করা যাতে অটো-রিপ্লাই ট্রিগার না হয়
     if (event.body.startsWith(module.exports.config.prefix ? "/" : "!") || event.body.startsWith("/gemini")) return;
 
-    // You might want to add a small delay or a "typing..." indicator here
-    // api.sendTypingIndicator(event.threadID); // Example, depending on your API wrapper
+    // আপনি এখানে একটি ছোট বিলম্ব বা "typing..." নির্দেশক যোগ করতে পারেন
+    // api.sendTypingIndicator(event.threadID); // উদাহরণ, আপনার API র‍্যাপার অনুযায়ী
 
     const reply = await askGemini(event.body);
     api.sendMessage(`🤖 Gemini:\n\n${reply}`, event.threadID, event.messageID);
-
 };
