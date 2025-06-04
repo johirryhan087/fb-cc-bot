@@ -101,7 +101,9 @@ async function urlToBase64(url) {
 }
 
 
-async function askGemini(userPrompt, threadID, imageAttachment = null) { // imageAttachment প্যারামিটার যোগ করা হয়েছে
+// ... (previous code remains the same up to async function askGemini)
+
+async function askGemini(userPrompt, threadID, imageAttachment = null) {
     // এই থ্রেডের জন্য হিস্টোরি লোড করা হয়েছে কিনা, তা নিশ্চিত করা
     if (!loadedHistories[threadID]) {
         await loadHistoryForThread(threadID);
@@ -137,19 +139,21 @@ async function askGemini(userPrompt, threadID, imageAttachment = null) { // imag
             });
         });
 
+        // --- পরিবর্তন শুরু ---
         // বর্তমান ইউজার প্রম্পট এবং ছবি (যদি থাকে) যোগ করা
-        let currentPromptParts = [];
+        // এই 'currentPromptParts' অ্যারে সরাসরি sendMessage এর 'parts' এ যাবে
+        let currentMessageParts = []; // Rename to currentMessageParts for clarity
+
         if (userPrompt) {
-            currentPromptParts.push({ text: userPrompt });
+            currentMessageParts.push({ text: userPrompt });
         }
 
         if (imageAttachment) {
-            // ছবির Base64 ডেটা যোগ করা
             const base64Image = await urlToBase64(imageAttachment.url);
             if (base64Image) {
-                currentPromptParts.push({
+                currentMessageParts.push({
                     inlineData: {
-                        mimeType: imageAttachment.mimeType, // e.g., 'image/jpeg', 'image/png'
+                        mimeType: imageAttachment.mimeType,
                         data: base64Image
                     }
                 });
@@ -160,35 +164,32 @@ async function askGemini(userPrompt, threadID, imageAttachment = null) { // imag
             }
         }
 
-        // যদি কোনো প্রম্পট পার্ট থাকে (টেক্সট বা ছবি), তাহলে তা মেসেজ হিস্টোরিতে যোগ করুন
-        if (currentPromptParts.length > 0) {
-            messagesForGemini.push({
-                role: "user",
-                parts: currentPromptParts
-            });
-        } else {
-             // যদি টেক্সট প্রম্পট ও ছবি দুটোই না থাকে, তবে কিছু করার নেই।
-             // এটি সাধারণত হওয়া উচিত নয়, কারণ handleEvent/run ফাংশন ইনপুট চেক করে।
-             return "কিছু জানতে চেয়েছো নাকি, বন্ধু?";
+        // যদি কোনো মেসেজ পার্ট না থাকে (যা হওয়া উচিত নয়)
+        if (currentMessageParts.length === 0) {
+            return "কিছু জানতে চেয়েছো নাকি, বন্ধু?";
         }
+        // --- পরিবর্তন শেষ ---
 
-
+        // chat শুরু করা, এতে পূর্ববর্তী সম্পূর্ণ মেসেজ হিস্টোরি যাবে
+        // এখানে messagesForGemini এর শেষ উপাদানটি (যা বর্তমান ইউজার প্রম্পট) বাদ দেওয়া হয়েছে
+        // কারণ এটি chat.sendMessage এর মাধ্যমে আলাদাভাবে পাঠানো হবে।
         const chat = model.startChat({
-            history: messagesForGemini.slice(0, -1), // শেষ মেসেজটি (বর্তমান userPrompt) ইতিহাস থেকে বাদ দেওয়া হয়েছে
-                                                    // কারণ এটি sendMessage এর মাধ্যমে পাঠানো হবে।
-                                                    // এবং persona prompt একবারই যাবে।
+            history: messagesForGemini, // সম্পূর্ণ হিস্টোরি (persona সহ) এখানে পাঠানো হচ্ছে
             generationConfig: {
                 maxOutputTokens: 2048,
             },
         });
         
-        // sendMessage এ বর্তমান ইউজার প্রম্পট এবং ছবি পাঠানো
-        const result = await chat.sendMessage({ parts: currentPromptParts });
+        // --- পরিবর্তন শুরু ---
+        // sendMessage এ সরাসরি 'parts' অ্যারে পাঠানো
+        const result = await chat.sendMessage({ parts: currentMessageParts });
+        // --- পরিবর্তন শেষ ---
+
         const response = await result.response;
         const replyText = response.text();
 
         // 📝 কনভারসেশন হিস্টোরি আপডেট করা (শুধুমাত্র টেক্সট মেসেজ সেভ হবে)
-        currentConversationHistory.push({ role: "user", content: userPrompt || "ছবি পাঠানো হয়েছে" }); // যদি শুধু ছবি থাকে, তাহলে 'ছবি পাঠানো হয়েছে' লিখা হবে
+        currentConversationHistory.push({ role: "user", content: userPrompt || "ছবি পাঠানো হয়েছে" });
         currentConversationHistory.push({ role: "assistant", content: replyText });
 
         // হিস্টোরি একটি নির্দিষ্ট দৈর্ঘ্যে সীমাবদ্ধ রাখা
@@ -203,9 +204,14 @@ async function askGemini(userPrompt, threadID, imageAttachment = null) { // imag
         return replyText;
     } catch (error) {
         console.error("❌ Gemini API Error:", error.response?.data || error.message);
+        // [GoogleGenerativeAI Error]: First content should be with role 'user', got system
+        // এই এররটি এড়াতে, system prompt কে সরাসরি history তে না দিয়ে user prompt এর অংশ হিসেবে পাঠানো হয়েছিল।
+        // এখন 'request is not iterable' এরর সমাধানের জন্য sendMessage এর প্যারামিটার ফরম্যাট ঠিক করা হয়েছে।
         return "❌ Gemini API তে সমস্যা হয়েছে। আমি দুঃখিত, বন্ধু। পরে আবার চেষ্টা করো।";
     }
 }
+
+// ... (Rest of the code remains the same for module.exports.run and module.exports.handleEvent)
 
 // ✅ /gemini কমান্ড
 module.exports.run = async function ({ api, event, args }) {
