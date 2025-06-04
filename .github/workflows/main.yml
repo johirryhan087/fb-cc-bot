@@ -1,3 +1,7 @@
+# This GitHub Actions workflow is intentionally disabled.
+# Reason: Deployment and running are handled exclusively via Railway.
+# Do not modify this file to run jobs.
+
 name: Nayan-Bot
 
 on:
@@ -7,20 +11,10 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  no_run:
+    if: false  # Hard-disabled: No job will ever run
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Nayan-Bot
-        run: npm start
+      - name: Disabled Job
+        run: echo "This workflow is disabled. Deployment is managed on Railway only."
