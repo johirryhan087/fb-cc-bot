@@ -1,12 +1,12 @@
 module.exports.config = {
-  name: "admin2",
+  name: "admin",
   version: "2.0.0",
   permission: 0,
   credits: "Nayan",
   description: "control admin lists",
   prefix: false,
   category: "admin",
-  usages: "admin2 [add/remove] [uid]",
+  usages: "admin [add/remove] [uid]",
   cooldowns: 5,
 };
 
