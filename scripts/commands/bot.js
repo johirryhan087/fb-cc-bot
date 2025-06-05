@@ -2,6 +2,29 @@ const axios = require('axios');
 const fs = require('fs'); 
 const path = require('path');
 
+const statusPath = path.join(__dirname, 'system', 'botStatus.json');
+
+function loadBotStatus() {
+  try {
+    if (!fs.existsSync(statusPath)) {
+      fs.writeFileSync(statusPath, JSON.stringify({ status: "off" }, null, 2));
+    }
+    const data = fs.readFileSync(statusPath, 'utf8');
+    return JSON.parse(data).status;
+  } catch (err) {
+    console.error('Error loading bot status:', err);
+    return "off";
+  }
+}
+
+function saveBotStatus(status) {
+  try {
+    fs.writeFileSync(statusPath, JSON.stringify({ status }, null, 2));
+  } catch (err) {
+    console.error('Error saving bot status:', err);
+  }
+}
+
 module.exports = {
   config: {
     name: "bot",
@@ -18,13 +41,11 @@ module.exports = {
 
   handleReply: async function ({ api, event }) {
     try {
-
       const apiData = await axios.get('https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json');
       const apiUrl = apiData.data.sim;
       const kl = await axios.get(`https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json`);
       const apiUrl2 = kl.data.api2;
       const response = await axios.get(`${apiUrl}/sim?type=ask&ask=${encodeURIComponent(event.body)}`);
-      console.log(response.data);
       const result = response.data.data.msg;
 
       const textStyles = loadTextStyles();
@@ -34,17 +55,15 @@ module.exports = {
       const text = fontResponse.data.data.bolded;
 
       api.sendMessage(text, event.threadID, (error, info) => {
-        if (error) {
-          console.error('Error replying to user:', error);
-          return api.sendMessage('An error occurred while processing your request. Please try again later.', event.threadID, event.messageID);
+        if (!error) {
+          global.client.handleReply.push({
+            type: 'reply',
+            name: this.config.name,
+            messageID: info.messageID,
+            author: event.senderID,
+            head: event.body
+          });
         }
-        global.client.handleReply.push({
-          type: 'reply',
-          name: this.config.name,
-          messageID: info.messageID,
-          author: event.senderID,
-          head: event.body
-        });
       }, event.messageID);
 
     } catch (error) {
@@ -55,12 +74,27 @@ module.exports = {
 
   start: async function ({ nayan, events, args, Users }) {
     try {
-      const msg = args.join(" ");
+      const msg = args.join(" ").toLowerCase();
+
+      if (msg === "bot on") {
+        saveBotStatus("on");
+        return nayan.reply("✅ Bot is now ON.", events.threadID, events.messageID);
+      }
+
+      if (msg === "bot off") {
+        saveBotStatus("off");
+        return nayan.reply("❌ Bot is now OFF.", events.threadID, events.messageID);
+      }
+
+      if (loadBotStatus() === "off") {
+        return;
+      }
+
       const apiData = await axios.get('https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json');
       const apiUrl = apiData.data.sim;
+      const msgRaw = args.join(" ");
 
-
-      if (!msg) {
+      if (!msgRaw) {
         const greetings = [
           "আহ শুনা আমার তোমার অলিতে গলিতে উম্মাহ😇😘",
           "কি গো সোনা আমাকে ডাকছ কেনো",
@@ -76,24 +110,21 @@ module.exports = {
           body: `${name}, ${rand}`,
           mentions: [{ tag: name, id: events.senderID }]
         }, events.threadID, (error, info) => {
-          if (error) {
-            return nayan.reply('An error occurred while processing your request. Please try again later.', events.threadID, events.messageID);
+          if (!error) {
+            global.client.handleReply.push({
+              type: 'reply',
+              name: this.config.name,
+              messageID: info.messageID,
+              author: events.senderID,
+              head: msgRaw,
+            });
           }
-
-          global.client.handleReply.push({
-            type: 'reply',
-            name: this.config.name,
-            messageID: info.messageID,
-            author: events.senderID,
-            head: msg,
-          });
         }, events.messageID);
       }
 
-      else if (msg.startsWith("textType")) {
+      else if (msg.startsWith("texttype")) {
         const selectedStyle = msg.split(" ")[1];
         const options = ['serif', 'sans', 'italic', 'italic-sans', 'medieval', 'normal'];
-
         if (options.includes(selectedStyle)) {
           saveTextStyle(events.threadID, selectedStyle);
           return nayan.reply({ body: `Text type set to "${selectedStyle}" successfully!` }, events.threadID, events.messageID);
@@ -103,72 +134,56 @@ module.exports = {
       }
 
       else if (msg.startsWith("delete")) {
-        const deleteParams = msg.replace("delete", "").trim().split("&");
+        const deleteParams = msgRaw.replace("delete", "").trim().split("&");
         const question = deleteParams[0].replace("ask=", "").trim();
         const answer = deleteParams[1].replace("ans=", "").trim();
-
         const d = await axios.get(`${apiUrl}/sim?type=delete&ask=${encodeURIComponent(question)}&ans=${encodeURIComponent(answer)}&uid=${events.senderID}`)
         const replyMessage = d.data.msg || d.data.data.msg;
-
         return nayan.reply({ body: replyMessage }, events.threadID, events.messageID);
       }
 
-        else if (msg.startsWith("edit")) {
-          const editParams = msg.replace("edit", "").trim().split("&");
-          const oldQuestion = editParams[0].replace("old=", "").trim();
-          const newQuestion = editParams[1].replace("new=", "").trim();
-
-          const d = await axios.get(`${apiUrl}/sim?type=edit&old=${encodeURIComponent(oldQuestion)}&new=${encodeURIComponent(newQuestion)}&uid=${events.senderID}`);
-          const replyMessage = d.data.msg || d.data.data?.msg || "No response received.";
-
-          return nayan.reply({ body: replyMessage }, events.threadID, events.messageID);
-        }
-
+      else if (msg.startsWith("edit")) {
+        const editParams = msgRaw.replace("edit", "").trim().split("&");
+        const oldQuestion = editParams[0].replace("old=", "").trim();
+        const newQuestion = editParams[1].replace("new=", "").trim();
+        const d = await axios.get(`${apiUrl}/sim?type=edit&old=${encodeURIComponent(oldQuestion)}&new=${encodeURIComponent(newQuestion)}&uid=${events.senderID}`);
+        const replyMessage = d.data.msg || d.data.data?.msg || "No response received.";
+        return nayan.reply({ body: replyMessage }, events.threadID, events.messageID);
+      }
 
       else if (msg.startsWith("info")) {
         const response = await axios.get(`${apiUrl}/sim?type=info`);
         const totalAsk = response.data.data.totalKeys;
         const totalAns = response.data.data.totalResponses;
-
         return nayan.reply({ body: `Total Ask: ${totalAsk}\nTotal Answer: ${totalAns}` }, events.threadID, events.messageID);
       } 
 
       else if (msg.startsWith("teach")) {
-        const teachParams = msg.replace("teach", "").trim().split("&");
+        const teachParams = msgRaw.replace("teach", "").trim().split("&");
         const question = teachParams[0].replace("ask=", "").trim();
         const answer = teachParams[1].replace("ans=", "").trim();
-
         const response = await axios.get(`${apiUrl}/sim?type=teach&ask=${encodeURIComponent(question)}&ans=${encodeURIComponent(answer)}`);
         const replyMessage = response.data.msg;
         const ask = response.data.data.ask;
         const ans = response.data.data.ans;
-
         if (replyMessage.includes("already")) {
           return nayan.reply(`📝Your Data Already Added To Database\n1️⃣ASK: ${ask}\n2️⃣ANS: ${ans}`, events.threadID, events.messageID);
         }
-
         return nayan.reply({ body: `📝Your Data Added To Database Successfully\n1️⃣ASK: ${ask}\n2️⃣ANS: ${ans}` }, events.threadID, events.messageID);
       } 
 
       else if (msg.startsWith("askinfo")) {
-        const question = msg.replace("askinfo", "").trim();
-
-        if (!question) {
-          return nayan.reply('Please provide a question to get information about.', events.threadID, events.messageID);
-        }
-
+        const question = msgRaw.replace("askinfo", "").trim();
+        if (!question) return nayan.reply('Please provide a question to get information about.', events.threadID, events.messageID);
         const response = await axios.get(`${apiUrl}/sim?type=keyinfo&ask=${encodeURIComponent(question)}`);
         const replyData = response.data.data;
         const answers = replyData.answers;
-
         if (!answers || answers.length === 0) {
           return nayan.reply(`No information available for the question: "${question}"`, events.threadID, events.messageID);
         }
-
         const replyMessage = `Info for "${question}":\n\n` +
           answers.map((answer, index) => `📌 ${index + 1}. ${answer}`).join("\n") +
           `\n\nTotal answers: ${answers.length}`;
-
         return nayan.reply({ body: replyMessage }, events.threadID, events.messageID);
       } 
 
@@ -176,31 +191,24 @@ module.exports = {
         const cmd = this.config.name;
         const prefix = global.config.PREFIX;
         const helpMessage = `
-                🌟 **Available Commands:**
+🌟 **Available Commands:**
 
-                1. 🤖 ${prefix}${cmd} askinfo [question]: Get information about a specific question.
+1. 🤖 ${prefix}${cmd} askinfo [question]
+2. 📚 ${prefix}${cmd} teach ask=[q]&ans=[a]
+3. ❌ ${prefix}${cmd} delete ask=[q]&ans=[a]
+4. ✏️ ${prefix}${cmd} edit old=[q1]&new=[q2]
+5. 📊 ${prefix}${cmd} info
+6. 👋 ${prefix}${cmd} hi
+7. 🎨 ${prefix}${cmd} textType [type]
+8. ✅ ${prefix}${cmd} bot on / bot off
 
-                2. 📚 ${prefix}${cmd} teach ask=[question]&ans=[answer]: Teach the bot a new question and answer pair.
-
-                3. ❌ ${prefix}${cmd} delete ask=[question]&ans=[answer]: Delete a specific question and answer pair. (Admin only)
-
-                4. ✏️ ${prefix}${cmd} edit old=[old_question]&new=[new_question]: Edit an existing question. (Admin only)
-
-                5. 📊 ${prefix}${cmd} info: Get the total number of questions and answers.
-
-                6. 👋 ${prefix}${cmd} hi: Send a random greeting.
-
-                7. 🎨 ${prefix}${cmd} textType [type]: Set the text type (options: serif, sans, italic, italic-sans, medieval, normal).
-
-                ⚡ Use these commands to interact with the bot effectively!
+⚡ Use these commands to interact with the bot!
         `;
-
-
         return nayan.reply({ body: helpMessage }, events.threadID, events.messageID);
       } 
 
       else {
-        const response = await axios.get(`${apiUrl}/sim?type=ask&ask=${encodeURIComponent(msg)}`);
+        const response = await axios.get(`${apiUrl}/sim?type=ask&ask=${encodeURIComponent(msgRaw)}`);
         const replyMessage = response.data.data.msg;
 
         const textStyles = loadTextStyles();
@@ -213,36 +221,30 @@ module.exports = {
         const styledText = font.data.data.bolded;
 
         nayan.reply({ body: styledText }, events.threadID, (error, info) => {
-          if (error) {
-            return nayan.reply('An error occurred while processing your request. Please try again later.', events.threadID, events.messageID);
+          if (!error) {
+            global.client.handleReply.push({
+              type: 'reply',
+              name: this.config.name,
+              messageID: info.messageID,
+              author: events.senderID,
+              head: msgRaw,
+            });
           }
-
-          global.client.handleReply.push({
-            type: 'reply',
-            name: this.config.name,
-            messageID: info.messageID,
-            author: events.senderID,
-            head: msg,
-          });
         }, events.messageID);
       }
     } catch (error) {
       console.log(error);
       nayan.reply('An error has occurred, please try again later.', events.threadID, events.messageID);
     }
+  }
 }
-}
-
 
 function loadTextStyles() {
   const Path = path.join(__dirname, 'system', 'textStyles.json');
   try {
-
     if (!fs.existsSync(Path)) {
       fs.writeFileSync(Path, JSON.stringify({}, null, 2));
     }
-
-
     const data = fs.readFileSync(Path, 'utf8');
     return JSON.parse(data);  
   } catch (error) {
@@ -252,15 +254,10 @@ function loadTextStyles() {
 }
 
 function saveTextStyle(threadID, style) {
-
   const styles = loadTextStyles(); 
-
-
   styles[threadID] = { style }; 
-
   const Path = path.join(__dirname, 'system', 'textStyles.json');
   try {
-
     fs.writeFileSync(Path, JSON.stringify(styles, null, 2));
   } catch (error) {
     console.error('Error saving text styles:', error);
