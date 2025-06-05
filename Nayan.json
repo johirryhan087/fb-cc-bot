@@ -9,7 +9,8 @@
   "saveState": true,
   "banMsg": false,
   "adminOnlyMsg": false,
-  "BOTNAME": "nayan-bot",
+  "BOTNAME": "CC Bot",
+  "NICKNAME": "সুন্দরী",
   "PREFIX": "/",
   "react": "☠️",
   "OPERATOR": [
