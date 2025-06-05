@@ -24,32 +24,31 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const HISTORY_DIR = path.join(__dirname, 'gemini_histories');
 const STATE_FILE = path.join(__dirname, 'gemini_state.json');
 
-let autoReplyEnabled = false;
+let autoReplyState = {}; // 🔄 per-thread auto reply state
 const MAX_HISTORY_TURNS = 50;
 let loadedHistories = {};
 
-// 🔄 Auto state functions
+// 🔄 Load auto reply state
 async function loadAutoReplyState() {
     try {
         if (await fs.pathExists(STATE_FILE)) {
             const data = await fs.readFile(STATE_FILE, 'utf8');
-            const parsed = JSON.parse(data);
-            autoReplyEnabled = parsed.autoReplyEnabled || false;
-            console.log(`🔄 Auto reply state loaded: ${autoReplyEnabled}`);
+            autoReplyState = JSON.parse(data);
+            console.log(`🔄 Auto reply state loaded.`);
         } else {
-            autoReplyEnabled = false;
+            autoReplyState = {};
         }
     } catch (err) {
         console.error("❌ Error loading auto reply state:", err);
-        autoReplyEnabled = false;
+        autoReplyState = {};
     }
 }
 
+// 💾 Save auto reply state
 async function saveAutoReplyState() {
     try {
-        const data = { autoReplyEnabled };
-        await fs.writeFile(STATE_FILE, JSON.stringify(data, null, 2), 'utf8');
-        console.log(`💾 Auto reply state saved: ${autoReplyEnabled}`);
+        await fs.writeFile(STATE_FILE, JSON.stringify(autoReplyState, null, 2), 'utf8');
+        console.log(`💾 Auto reply state saved.`);
     } catch (err) {
         console.error("❌ Error saving auto reply state:", err);
     }
@@ -183,15 +182,15 @@ module.exports.run = async function ({ api, event, args }) {
     }
 
     if (input.toLowerCase() === "on") {
-        autoReplyEnabled = true;
+        autoReplyState[threadID] = true;
         await saveAutoReplyState();
-        return api.sendMessage("✅ Auto Gemini reply চালু হয়েছে।", threadID, event.messageID);
+        return api.sendMessage("✅ Auto Gemini reply এই চ্যাটে চালু হয়েছে।", threadID, event.messageID);
     }
 
     if (input.toLowerCase() === "off") {
-        autoReplyEnabled = false;
+        autoReplyState[threadID] = false;
         await saveAutoReplyState();
-        return api.sendMessage("❌ Auto Gemini reply বন্ধ হয়েছে।", threadID, event.messageID);
+        return api.sendMessage("❌ Auto Gemini reply এই চ্যাটে বন্ধ হয়েছে।", threadID, event.messageID);
     }
 
     api.sendMessage("🤖 Gemini তোমার প্রশ্নের উত্তর খুঁজছে...", threadID);
@@ -201,12 +200,13 @@ module.exports.run = async function ({ api, event, args }) {
 
 // 💬 অটো রেসপন্ডার
 module.exports.handleEvent = async function ({ api, event }) {
-    if (!autoReplyEnabled) return;
+    const threadID = event.threadID;
+
+    if (!autoReplyState[threadID]) return;
     if (event.senderID == api.getCurrentUserID()) return;
     if (!event.body || event.body.length < 2) return;
-    if (event.body.startsWith(module.exports.config.prefix ? "/" : "!") || event.body.startsWith("/gemini")) return;
+    if (event.body.startsWith("/") || event.body.startsWith("!")) return;
 
-    const threadID = event.threadID;
     const reply = await askGemini(event.body, threadID);
     api.sendMessage(`🤖 Gemini:\n\n${reply}`, threadID, event.messageID);
 };
