@@ -3,7 +3,7 @@ module.exports.config = {
     version: '1.0.0',
     permission: 0,
     credits: 'nayan',
-    prefix: false,
+    prefix: true,
     description: 'group administrator list.',
     category: 'without prefix',
     usages: 'admins',
