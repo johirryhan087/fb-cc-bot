@@ -56,13 +56,11 @@ axios.get(gifUrl, { responseType: 'arraybuffer' })
     fs.writeFileSync(gifPath, response.data);
   if (event.logMessageData.addedParticipants.some(i => i.userFbId == api.getCurrentUserID())) {
     api.changeNickname(`[ ${global.config.NICKNAME} ] • ${(!global.config.BOTNAME) ? "bot" : global.config.BOTNAME}`, threadID, api.getCurrentUserID());
-    return api.sendMessage("চলে এসেছি আমি সেই সুন্দরী তোমাদের মাঝে🤭!", event.threadID, () => api.sendMessage({ body: `${global.config.BOTNAME}
-<-------------------->\n To View any Commands Use👉/help\n See command👉/command
-<-------------------->
-For any help contact
-🟣Facebook Account Link: 
-https://www.facebook.com/profile.php?id=61575564122199`, attachment: fs.createReadStream(gifPath)}, threadID));
-  }})
+    return api.sendMessage({
+    body: "চলে এসেছি আমি সেই সুন্দরী তোমাদের মাঝে🤭!",
+    attachment: fs.createReadStream(gifPath) 
+}, event.threadID);
+} })
 .catch(error => {
     console.error(error);
 });
