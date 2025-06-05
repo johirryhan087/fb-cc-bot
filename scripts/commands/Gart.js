@@ -3,11 +3,11 @@ module.exports = {
     name: "gart",
     version: "1.0.0",
     permission: 0,
-    credits: "Mahir",
+    credits: "Nayan",
     description: "Generate images with a prompt, style, and specified amount using the second API.",
     prefix: true,
     category: "prefix",
-    usages: "[prompt] .stl [style] .cnt [amount (optional)]", // Updated usage
+    usages: "[prompt] .stl [style] .cnt [amount (optional)]",
     cooldowns: 10,
   },
 
@@ -27,26 +27,21 @@ module.exports = {
     let style = "";
     let amount = 4; // Default amount of images
 
-    // Find the positions of '.stl' and '.cnt'
     const stlIndex = args.indexOf(".stl");
     const cntIndex = args.indexOf(".cnt");
 
-    // Validate command structure
     if (stlIndex === -1 || stlIndex === 0 || (cntIndex !== -1 && cntIndex < stlIndex)) {
       return nayan.reply(lang('missing_prompt_style'), events.threadID, events.messageID);
     }
 
-    // Extract prompt
     prompt = args.slice(0, stlIndex).join(" ");
 
-    // Extract style
-    if (cntIndex !== -1) { // If .cnt is present
+    if (cntIndex !== -1) {
       style = args.slice(stlIndex + 1, cntIndex).join(" ");
-    } else { // If only .stl is present
+    } else {
       style = args.slice(stlIndex + 1).join(" ");
     }
 
-    // Extract amount if .cnt is present
     if (cntIndex !== -1) {
       const parsedAmount = parseInt(args[cntIndex + 1]);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -59,6 +54,10 @@ module.exports = {
       return nayan.reply(lang('missing_prompt_style'), events.threadID, events.messageID);
     }
 
+    // --- Added: Immediate reply to user ---
+    await nayan.reply("Generating image(s)... Please wait.", events.threadID, events.messageID);
+    // --- End Added ---
+
     let imgData = [];
     let generatedCount = 0;
 
@@ -70,7 +69,7 @@ module.exports = {
 
         if (res.data && res.data.url) {
           const imageUrl = res.data.url;
-          const path = __dirname + `/cache/imagine2_${events.senderID}_${Date.now()}_${i}.jpg`; // More unique path
+          const path = __dirname + `/cache/imagine2_${events.senderID}_${Date.now()}_${i}.jpg`;
           const getDown = (await axios.get(imageUrl, { responseType: 'arraybuffer' })).data;
           fs.writeFileSync(path, Buffer.from(getDown, 'binary'));
           imgData.push(fs.createReadStream(path));
@@ -93,7 +92,6 @@ module.exports = {
       console.error("Error in imagine2 command:", error);
       return nayan.reply("An error occurred while generating the image(s). Please check your prompt and style, then try again later.", events.threadID, events.messageID);
     } finally {
-      // Clean up cached images
       for (const stream of imgData) {
         if (fs.existsSync(stream.path)) {
           fs.unlinkSync(stream.path);
