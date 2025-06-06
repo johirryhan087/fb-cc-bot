@@ -25,7 +25,7 @@ module.exports = {
 
     let prompt = "";
     let style = "";
-    let amount = 4; // Default amount of images
+    let amount = 1; // Default amount of images
 
     const stlIndex = args.indexOf(".stl");
     const cntIndex = args.indexOf(".cnt");
