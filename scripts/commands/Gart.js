@@ -3,19 +3,20 @@ module.exports = {
     name: "gart",
     version: "1.0.0",
     permission: 0,
-    credits: "Nayan",
-    description: "Generate images with a prompt, style, and specified amount using the second API.",
+    credits: "Tofazzol", 
+    description: "Generate images from a prompt with an optional style and amount.",
     prefix: true,
     category: "prefix",
-    usages: "[prompt] .stl [style] .cnt [amount (optional)]",
+    usages: "gart [prompt] .stl [style] .cnt [amount]", 
     cooldowns: 10,
   },
 
   languages: {
     "vi": {},
     "en": {
-      "missing_prompt_style": 'Please provide both a prompt and a style using the format: /imagine2 [your prompt] .stl [your style] .cnt [amount (optional)]\nExample: /imagine2 a-boy-is-playing .stl logo .cnt 2',
-      "invalid_amount": "The amount must be a number greater than 0."
+      "missing_prompt": 'Please provide a prompt. Usage: /gart a cat .stl anime .cnt 2',
+      "generating_message": "Generating your image(s), please wait...", // নতুন মেসেজ
+      "error": "An error occurred while generating the image. Please try again later."
     }
   },
 
@@ -23,80 +24,73 @@ module.exports = {
     const axios = require("axios");
     const fs = require("fs-extra");
 
+    // prompt, style এবং amount আলাদা করা
     let prompt = "";
     let style = "";
-    let amount = 1; // Default amount of images
+    let amount = 2; // Default to 2 image
 
-    const stlIndex = args.indexOf(".stl");
-    const cntIndex = args.indexOf(".cnt");
+    const argString = args.join(" ");
+    const promptMatch = argString.match(/(.*?)(?:\s*\.stl\s*(.*?))?(?:\s*\.cnt\s*(\d+))?$/i);
 
-    if (stlIndex === -1 || stlIndex === 0 || (cntIndex !== -1 && cntIndex < stlIndex)) {
-      return nayan.reply(lang('missing_prompt_style'), events.threadID, events.messageID);
+    if (promptMatch) {
+      prompt = promptMatch[1].trim();
+      style = promptMatch[2] ? promptMatch[2].trim() : "";
+      amount = promptMatch[3] ? parseInt(promptMatch[3]) : 1;
     }
 
-    prompt = args.slice(0, stlIndex).join(" ");
-
-    if (cntIndex !== -1) {
-      style = args.slice(stlIndex + 1, cntIndex).join(" ");
-    } else {
-      style = args.slice(stlIndex + 1).join(" ");
+    if (!prompt) {
+      return nayan.reply(lang('missing_prompt'), events.threadID, events.messageID);
     }
 
-    if (cntIndex !== -1) {
-      const parsedAmount = parseInt(args[cntIndex + 1]);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        return nayan.reply(lang('invalid_amount'), events.threadID, events.messageID);
-      }
-      amount = parsedAmount;
+    // সর্বোচ্চ 4টি ইমেজ জেনারেট করার জন্য সীমাবদ্ধতা
+    if (amount > 4) {
+      amount = 4;
+      nayan.reply("You can generate a maximum of 4 images at a time. Generating 4 images.", events.threadID, events.messageID);
     }
 
-    if (!prompt || !style) {
-      return nayan.reply(lang('missing_prompt_style'), events.threadID, events.messageID);
-    }
-
-    // --- Added: Immediate reply to user ---
-    await nayan.reply("Generating image(s)... Please wait.", events.threadID, events.messageID);
-    // --- End Added ---
-
-    let imgData = [];
-    let generatedCount = 0;
+    // তাৎক্ষণিক রিপ্লাই
+    nayan.reply(lang('generating_message'), events.threadID, events.messageID);
 
     try {
+      const imgData = [];
       for (let i = 0; i < amount; i++) {
         const apiUrl = `https://imggen-delta.vercel.app/?prompt=${encodeURIComponent(prompt)}&style=${encodeURIComponent(style)}`;
-
         const res = await axios.get(apiUrl);
 
-        if (res.data && res.data.url) {
-          const imageUrl = res.data.url;
-          const path = __dirname + `/cache/imagine2_${events.senderID}_${Date.now()}_${i}.jpg`;
-          const getDown = (await axios.get(imageUrl, { responseType: 'arraybuffer' })).data;
-          fs.writeFileSync(path, Buffer.from(getDown, 'binary'));
-          imgData.push(fs.createReadStream(path));
-          generatedCount++;
-        } else {
-          console.warn(`API did not return an image URL for prompt "${prompt}" and style "${style}" (attempt ${i + 1}).`);
+        const imageUrl = res.data.url;
+
+        if (!imageUrl) {
+          // যদি কোনো কারণে URL না পাওয়া যায়, তবে লুপ ব্রেক করে দেওয়া
+          console.error("No image URL found from API for iteration", i);
+          if (imgData.length === 0) { // যদি কোনো ইমেজই জেনারেট না হয়
+            return nayan.reply(lang('error'), events.threadID, events.messageID);
+          }
+          break;
         }
+
+        const path = __dirname + `/cache/gart_result_${i + 1}.png`;
+        const getDown = (await axios.get(imageUrl, { responseType: 'arraybuffer' })).data;
+        fs.writeFileSync(path, Buffer.from(getDown, 'utf-8'));
+        imgData.push(fs.createReadStream(path));
       }
 
       if (imgData.length === 0) {
-        return nayan.reply("Could not generate any images. Please try a different prompt or style.", events.threadID, events.messageID);
+        return nayan.reply(lang('error'), events.threadID, events.messageID);
       }
 
-      await nayan.reply({
+      nayan.reply({
         attachment: imgData,
-        body: `🔍Imagine Result🔍\n\n📝Prompt: ${prompt}\n✨Style: ${style}\n#️⃣Generated Images: ${generatedCount}`
-      }, events.threadID, events.messageID);
+        body: `🔍Imagine Result🔍\n\n📝Prompt: ${prompt}\n${style ? `🎨Style: ${style}\n` : ''}#️⃣Number of Images: ${imgData.length}`
+      }, events.threadID, () => {
+        // সব ইমেজ পাঠানোর পর ক্যাশ ফাইলগুলো ডিলিট করা
+        for (let i = 0; i < imgData.length; i++) {
+          fs.unlinkSync(__dirname + `/cache/gart_result_${i + 1}.png`);
+        }
+      });
 
     } catch (error) {
-      console.error("Error in imagine2 command:", error);
-      return nayan.reply("An error occurred while generating the image(s). Please check your prompt and style, then try again later.", events.threadID, events.messageID);
-    } finally {
-      for (const stream of imgData) {
-        if (fs.existsSync(stream.path)) {
-          fs.unlinkSync(stream.path);
-        }
-      }
+      console.error("Gart command error:", error);
+      nayan.reply(lang('error'), events.threadID, events.messageID);
     }
   }
 };
