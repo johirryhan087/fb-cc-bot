@@ -3,7 +3,7 @@ module.exports.config = {
     name: "grok",
     version: "1.0.0",
     permission: 0,
-    credits: "Grok By Nayan", // Credits updated for Grok
+    credits: "Grok By Nayan",
     description: "Grok AI Integration",
     prefix: true,
     category: "ai",
@@ -11,44 +11,17 @@ module.exports.config = {
     cooldowns: 3,
 };
 
-const axios = require("axios"); // Added axios for API calls
+const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 const cron = require("node-cron");
 
 // 🗂️ Paths
 const GROK_HISTORY_DIR = path.join(__dirname, 'grok_histories');
-const GROK_STATE_FILE = path.join(__dirname, 'grok_state.json');
 
-let grokAutoReplyState = {}; // 🔄 per-thread auto reply state for Grok
-const MAX_GROK_HISTORY_TURNS = 20; // Grok might not need as long history as Gemini
+const MAX_GROK_HISTORY_TURNS = 20;
 let loadedGrokHistories = {};
-
-// 🔄 Load Grok auto reply state
-async function loadGrokAutoReplyState() {
-    try {
-        if (await fs.pathExists(GROK_STATE_FILE)) {
-            const data = await fs.readFile(GROK_STATE_FILE, 'utf8');
-            grokAutoReplyState = JSON.parse(data);
-            console.log(`🔄 Grok auto reply state loaded.`);
-        } else {
-            grokAutoReplyState = {};
-        }
-    } catch (err) {
-        console.error("❌ Error loading Grok auto reply state:", err);
-        grokAutoReplyState = {};
-    }
-}
-
-// 💾 Save Grok auto reply state
-async function saveGrokAutoReplyState() {
-    try {
-        await fs.writeFile(GROK_STATE_FILE, JSON.stringify(grokAutoReplyState, null, 2), 'utf8');
-        console.log(`💾 Grok auto reply state saved.`);
-    } catch (err) {
-        console.error("❌ Error saving Grok auto reply state:", err);
-    }
-}
+let grokAutoReplyState = {}; // On/Off state for each thread (not persisted)
 
 // 🧠 Load Grok history
 async function loadGrokHistoryForThread(threadID) {
@@ -80,7 +53,7 @@ async function saveGrokHistoryForThread(threadID) {
     }
 }
 
-// 🗑️ Reset all Grok histories (optional: if Grok also has context memory)
+// 🗑️ Reset all Grok histories
 async function resetAllGrokHistories() {
     loadedGrokHistories = {};
     try {
@@ -96,7 +69,7 @@ async function resetAllGrokHistories() {
 }
 
 // ⏰ Schedule reset every 24 hours (or adjust as needed)
-cron.schedule('0 0 * * *', async () => { // Runs daily at midnight
+cron.schedule('0 0 * * *', async () => { // Runs daily at midnight (00:00)
     console.log('⏰ Scheduled Grok history reset running...');
     await resetAllGrokHistories();
 }, {
@@ -106,7 +79,6 @@ cron.schedule('0 0 * * *', async () => { // Runs daily at midnight
 // 📁 Ensure folders exist and load state
 (async () => {
     await fs.ensureDir(GROK_HISTORY_DIR);
-    await loadGrokAutoReplyState();
 })();
 
 // 🤖 Ask Grok
@@ -118,20 +90,16 @@ async function askGrok(userPrompt, threadID) {
     const currentConversationHistory = loadedGrokHistories[threadID];
 
     try {
-        // Grok API seems to be a simple text-in, text-out.
-        // It's not clear if it supports conversational context like Gemini.
-        // For now, we'll send the raw user prompt.
-        // If Grok API supports history, you'd need to adapt this part.
         const response = await axios.get(`https://grok-nu.vercel.app/?text=${encodeURIComponent(userPrompt)}`);
 
         if (!response.data || !response.data.ok || !response.data.msg) {
             console.error("❌ Grok API returned an invalid response:", response.data);
-            return "❌ Grok API থেকে কোনো সঠিক উত্তর পাওয়া যায়নি।";
+            return "❌ Grok API থেকে কোনো সঠিক উত্তর পাওয়া যায়নি।";
         }
 
         const replyText = response.data.msg;
 
-        // Add to history (even if Grok doesn't use it, for logging/future proofing)
+        // Add to history
         currentConversationHistory.push({ role: "user", content: userPrompt });
         currentConversationHistory.push({ role: "assistant", content: replyText });
 
@@ -151,10 +119,22 @@ async function askGrok(userPrompt, threadID) {
     }
 }
 
+// Function to check if the sender is a group admin
+async function isAdmin(api, threadID, senderID) {
+    try {
+        const threadInfo = await api.getThreadInfo(threadID);
+        return threadInfo.adminIDs.some(adminInfo => adminInfo.id === senderID);
+    } catch (error) {
+        console.error("❌ Error checking admin status:", error);
+        return false;
+    }
+}
+
 // ✅ /grok কমান্ড
 module.exports.run = async function ({ api, event, args }) {
     const input = args.join(" ");
     const threadID = event.threadID;
+    const senderID = event.senderID;
 
     if (!input) {
         return api.sendMessage(
@@ -165,17 +145,22 @@ module.exports.run = async function ({ api, event, args }) {
     }
 
     if (input.toLowerCase() === "on") {
+        if (!await isAdmin(api, threadID, senderID)) {
+            return api.sendMessage("⛔ শুধুমাত্র গ্রুপের অ্যাডমিনরা অটো গ্রোক রিপ্লাই চালু করতে পারবে।", threadID, event.messageID);
+        }
         grokAutoReplyState[threadID] = true;
-        await saveGrokAutoReplyState();
         return api.sendMessage("✅ Auto Grok reply এই চ্যাটে চালু হয়েছে।", threadID, event.messageID);
     }
 
     if (input.toLowerCase() === "off") {
+        if (!await isAdmin(api, threadID, senderID)) {
+            return api.sendMessage("⛔ শুধুমাত্র গ্রুপের অ্যাডমিনরা অটো গ্রোক রিপ্লাই বন্ধ করতে পারবে।", threadID, event.messageID);
+        }
         grokAutoReplyState[threadID] = false;
-        await saveGrokAutoReplyState();
         return api.sendMessage("❌ Auto Grok reply এই চ্যাটে বন্ধ হয়েছে।", threadID, event.messageID);
     }
 
+    // Only show "Grok is searching..." for direct commands
     api.sendMessage("🤖 Grok তোমার প্রশ্নের উত্তর খুঁজছে...", threadID);
     const reply = await askGrok(input, threadID);
     return api.sendMessage(`🤖 Grok:\n\n${reply}`, threadID, event.messageID);
@@ -191,5 +176,6 @@ module.exports.handleEvent = async function ({ api, event }) {
     if (event.body.startsWith("/") || event.body.startsWith("!")) return; // Avoid processing other commands
 
     const reply = await askGrok(event.body, threadID);
+    // No "Grok is searching..." message here for auto-reply
     api.sendMessage(`🤖 Grok:\n\n${reply}`, threadID, event.messageID);
 };
