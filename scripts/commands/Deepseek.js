@@ -16,7 +16,7 @@ const cron = require("node-cron");
 const axios = require("axios");    
 
 // 🔐 API KEY 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 
 // 🗂️ হিস্টরি ফাইল সংরক্ষণের ডিরেক্টরি
 const HISTORY_DIR = path.join(__dirname, 'seek_histories'); 
