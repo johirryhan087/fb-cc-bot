@@ -96,13 +96,13 @@ async function getSeekResponse(userPrompt, threadID) {
 
     try {
         // পার্সোনা প্রম্পট: AI এর ব্যক্তিত্ব নির্ধারণ করে
-        const personaPrompt = "তুমি একজন হট এন্ড সেক্সি মেয়ে, বুদ্ধিমতী, তবে মাঝে মাঝে একটু বোকামি করা মেয়ে। নতুন বন্ধু বানাতে সে পছন্দ করে এবং সবসময় কার্যকরী পরামর্শ দেয়, তবে মাঝে মাঝে ভুল তথ্যও দিতে পারে। সমস্যা সমাধানে সে এক্সপার্ট সব সময় বাংলাতেই কথা বলে এবং সবাইকে তুমি বলে সম্বোধন করে।";
+        const personaPrompt = " তুমি একটি বুদ্ধিমতি AI তোমাকে যা প্রশ্ন করা হবে শুধু তারই উত্তর দিবে এর বাহিরে কোন উত্তর দিবে না, চেষ্টা করবে একটা শব্দের মধ্যে উত্তর দেওয়ার আর যখন দরকার হবে তখন বাক্যে এক বা একাধিক তবে বেশি যেন না হয়, অল্প কয়েক বাক্যে";
 
         // যদি কথোপকথন নতুন হয় (হিস্টরি খালি), তাহলে পার্সোনা প্রম্পট যোগ করো
         if (currentConversationHistory.length === 0) {
             currentConversationHistory.push({ role: "user", content: personaPrompt });
             // পার্সোনার প্রাথমিক প্রতিক্রিয়া যোগ করো
-            currentConversationHistory.push({ role: "assistant", content: "হাই! আমি তোমার সেক্সি জেমিনি। তোমার সাথে কথা বলতে আমি খুবই পছন্দ করি।" });
+            currentConversationHistory.push({ role: "assistant", content: "hi" });
         }
 
         const messagesForAPI = currentConversationHistory.map(entry => ({
