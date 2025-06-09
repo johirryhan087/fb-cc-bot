@@ -101,7 +101,7 @@ module.exports.run = async function ({ api, event }) {
     });
 
     const audio_url = uploadRes.data.upload_url;
-    api.sendMessage("🔍 অডিও বিশ্লেষণ করা হচ্ছে...", event.threadID);
+    api.sendMessage("🔍 দেখি সে কি বলছে:...", event.threadID);
 
     // ট্রান্সক্রিপশন শুরু
     const transcriptRes = await axios.post("https://api.assemblyai.com/v2/transcript", {
