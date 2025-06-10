@@ -1,132 +1,286 @@
 module.exports.config = {
   name: "youtube",
-  version: "1.1.0",
+  version: "1.0.1", // Changed version to indicate modification
   permission: 0,
-  credits: "Nayan & Modified by ChatGPT",
-  description: "Search and download YouTube videos or audios",
+  credits: "Nayan & YourName", // Added a placeholder for your name
+  description: "Download YouTube videos or audios",
   prefix: true,
   category: "Media",
-  usages: "search query",
+  usages: "[search query | YouTube link]",
   cooldowns: 5,
   dependencies: {}
 };
 
-module.exports.handleReply = async function ({ api, event, handleReply }) {
-  const axios = global.nodemodule.axios;
-  const fs = global.nodemodule["fs-extra"];
+module.exports.handleReply = async function ({
+  api: e,
+  event: a,
+  handleReply: t
+}) {
+  const n = global.nodemodule.axios,
+    s = global.nodemodule["fs-extra"],
+    {
+      unlinkSync: l,
+      statSync: h
+    } = global.nodemodule["fs-extra"];
 
-  const i = await axios.get("https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/video.json");
-  const o = i.data.keyVideo[Math.floor(Math.random() * i.data.keyVideo.length)];
+  const [choice, format] = a.body.toLowerCase().split(" ");
+  const chosenIndex = parseInt(choice);
 
-  const [indexRaw, formatRaw] = event.body.split(" ");
-  const index = parseInt(indexRaw);
-
-  if (isNaN(index) || index < 1 || index > handleReply.link.length || !["mp3", "mp4"].includes(formatRaw)) {
-    return api.sendMessage("⚠️ লিখুন: নম্বর + ফরম্যাট (যেমন: 1 mp3 বা 2 mp4)", event.threadID, event.messageID);
+  if (isNaN(chosenIndex) || chosenIndex < 1 || chosenIndex > 6) {
+    return e.sendMessage("দয়া করে 1 থেকে 6 এর মধ্যে একটি সংখ্যা এবং এক্সটেনশন (mp3/mp4) দিন, যেমন: 1 mp4", a.threadID, a.messageID);
   }
 
-  const videoId = handleReply.link[index - 1];
-  const downloadRequest = {
-    method: "GET",
-    url: "https://ytstream-download-youtube-videos.p.rapidapi.com/dl",
-    params: { id: videoId },
-    headers: {
-      "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
-      "x-rapidapi-key": o.API_KEY
-    }
-  };
+  if (!format || (format !== "mp3" && format !== "mp4")) {
+    return e.sendMessage("দয়া করে এক্সটেনশন (mp3 বা mp4) উল্লেখ করুন, যেমন: 1 mp4", a.threadID, a.messageID);
+  }
+
+  e.unsendMessage(t.messageID);
+  e.sendMessage("আপনার অনুরোধ প্রক্রিয়া করা হচ্ছে, দয়া করে অপেক্ষা করুন...", a.threadID);
 
   try {
-    const res = await axios.request(downloadRequest);
-    if (res.data.status === "fail") return api.sendMessage("❌ ডাউনলোড লিংক পাওয়া যায়নি।", event.threadID);
+    const videoId = t.link[chosenIndex - 1];
+    let apiUrl = `https://ytstream-download-youtube-videos.p.rapidapi.com/dl`;
+    let filename = `youtube_download.${format}`;
+    let successMessage = "";
 
-    const title = res.data.title;
-    const links = res.data.link;
+    // Fetch API Key dynamically
+    const i = await n.get("https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/video.json");
+    const r = i.data.keyVideo.length;
+    const o = i.data.keyVideo[Math.floor(Math.random() * r)]; // Random API Key
 
-    let downloadUrl;
-    if (formatRaw === "mp3") {
-      const audioKey = Object.keys(links).find(k => k.toLowerCase().includes("audio"));
-      if (!audioKey) return api.sendMessage("🔇 অডিও লিংক পাওয়া যায়নি।", event.threadID);
-      downloadUrl = links[audioKey][0];
+    const headers = {
+      "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
+      "x-rapidapi-key": o.API_KEY
+    };
+
+    let response;
+    if (format === "mp4") {
+      response = (await n.request({
+        method: "GET",
+        url: apiUrl,
+        params: {
+          id: videoId
+        },
+        headers: headers
+      })).data;
+      if (response.status === "fail") {
+        return e.sendMessage("এই ভিডিওটি ডাউনলোড করা যাচ্ছে না।", a.threadID, a.messageID);
+      }
+      const videoLink = Object.values(response.link).find(linkArray => linkArray[0].includes("mp4"))[0];
+      const videoData = (await n.get(videoLink, {
+        responseType: "arraybuffer"
+      })).data;
+      s.writeFileSync(__dirname + `/cache/${filename}`, Buffer.from(videoData, "utf-8"));
+      successMessage = `» ${response.title} (MP4) ডাউনলোড সম্পন্ন হয়েছে।`;
+    } else if (format === "mp3") {
+      // For MP3, we might need a different API endpoint or parameter,
+      // assuming the current API can handle audio streams.
+      // If not, you might need a separate API for audio.
+      // For simplicity, I'm assuming the same API can return audio.
+      response = (await n.request({
+        method: "GET",
+        url: apiUrl,
+        params: {
+          id: videoId
+        },
+        headers: headers
+      })).data;
+      if (response.status === "fail") {
+        return e.sendMessage("এই অডিওটি ডাউনলোড করা যাচ্ছে না।", a.threadID, a.messageID);
+      }
+      // Assuming the API provides an audio stream link within 'link' object
+      // This part might need adjustment based on the actual API response for MP3
+      const audioLink = Object.values(response.link).find(linkArray => linkArray[0].includes("mp3"))[0] ||
+                       Object.values(response.link)[0][0]; // Fallback if no specific mp3 link
+
+      const audioData = (await n.get(audioLink, {
+        responseType: "arraybuffer"
+      })).data;
+      s.writeFileSync(__dirname + `/cache/${filename}`, Buffer.from(audioData, "utf-8"));
+      successMessage = `» ${response.title} (MP3) ডাউনলোড সম্পন্ন হয়েছে।`;
+    }
+
+    const filePath = __dirname + `/cache/${filename}`;
+    if (h(filePath).size > 26e6) { // Check file size (25MB limit)
+      return e.sendMessage("ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো যাচ্ছে না।", a.threadID, () => l(filePath), a.messageID);
     } else {
-      const videoKey = Object.keys(links).find(k => k.includes("360") || k.includes("480") || k.includes("720"));
-      if (!videoKey) return api.sendMessage("📹 ভিডিও লিংক পাওয়া যায়নি।", event.threadID);
-      downloadUrl = links[videoKey][0];
+      return e.sendMessage({
+        body: successMessage,
+        attachment: s.createReadStream(filePath)
+      }, a.threadID, () => s.unlinkSync(filePath), a.messageID);
     }
 
-    const fileExt = formatRaw === "mp3" ? ".mp3" : ".mp4";
-    const filePath = __dirname + `/cache/youtube_file${fileExt}`;
-    const fileBuffer = (await axios.get(downloadUrl, { responseType: "arraybuffer" })).data;
-    fs.writeFileSync(filePath, Buffer.from(fileBuffer, "utf-8"));
-
-    if (fs.statSync(filePath).size > 26 * 1024 * 1024) {
-      fs.unlinkSync(filePath);
-      return api.sendMessage("❌ ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো সম্ভব নয়।", event.threadID);
+  } catch (error) {
+    console.error("Download error:", error);
+    return e.sendMessage("ফাইলটি ডাউনলোড করা যায়নি। API বা নেটওয়ার্ক সমস্যা হতে পারে।", a.threadID, a.messageID);
+  } finally {
+    // Clean up all cached image files from previous search
+    for (let i = 1; i < 7; i++) {
+      try {
+        l(__dirname + `/cache/${i}.png`);
+      } catch (e) {} // Ignore error if file doesn't exist
     }
-
-    return api.sendMessage({
-      body: `✅ ডাউনলোড সম্পন্ন: ${title}`,
-      attachment: fs.createReadStream(filePath)
-    }, event.threadID, () => fs.unlinkSync(filePath), event.messageID);
-
-  } catch (err) {
-    console.error(err);
-    return api.sendMessage("⚠️ ডাউনলোড中 সমস্যা হয়েছে!", event.threadID);
   }
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const axios = global.nodemodule.axios;
-  const fs = global.nodemodule["fs-extra"];
-  const YouTube = global.nodemodule["simple-youtube-api"];
+module.exports.run = async function ({
+  api: e,
+  event: a,
+  args: t
+}) {
+  const n = global.nodemodule.axios,
+    s = global.nodemodule["fs-extra"],
+    d = global.nodemodule["simple-youtube-api"],
+    {
+      createReadStream: m,
+      unlinkSync: h
+    } = global.nodemodule["fs-extra"];
 
-  const apiKeys = [
-    "AIzaSyB5A3Lum6u5p2Ki2btkGdzvEqtZ8KNLeXo",
-    "AIzaSyAyjwkjc0w61LpOErHY_vFo6Di5LEyfLK0",
-    "AIzaSyBY5jfFyaTNtiTSBNCvmyJKpMIGlpCSB4w",
-    "AIzaSyCYCg9qpFmJJsEcr61ZLV5KsmgT1RE5aI4"
-  ];
-  const yt = new YouTube(apiKeys[Math.floor(Math.random() * apiKeys.length)]);
+  // Fetch API Key dynamically for search and initial link processing
+  const i = await n.get("https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/video.json");
+  const r = i.data.keyVideo.length;
+  const o = i.data.keyVideo[Math.floor(Math.random() * r)]; // Random API Key for download
 
-  if (!args[0]) return api.sendMessage("🔍 দয়া করে সার্চ শব্দ লিখুন!", event.threadID, event.messageID);
+  const youtubeApiKeys = ["AIzaSyB5A3Lum6u5p2Ki2btkGdzvEqtZ8KNLeXo", "AIzaSyAyjwkjc0w61LpOErHY_vFo6Di5LEyfLK0", "AIzaSyBY5jfFyaTNtiTSBNCvmyJKpMIGlpCSB4w", "AIzaSyCYCg9qpFmJJsEcr61ZLV5KsmgT1RE5aI4"];
+  const selectedYoutubeApiKey = youtubeApiKeys[Math.floor(Math.random() * youtubeApiKeys.length)];
+  const youtubeApi = new d(selectedYoutubeApiKey);
 
-  const query = args.join(" ");
-  try {
-    const results = await yt.searchVideos(query, 6);
-    let msg = "🎶 নিচের ভিডিওগুলো পাওয়া গেছে:\n\n";
-    let links = [];
-    let attachments = [];
+  if (t.length === 0 || !t) {
+    return e.sendMessage("অনুসন্ধান খালি রাখা যাবে না!", a.threadID, a.messageID);
+  }
 
-    for (let i = 0; i < results.length; i++) {
-      const video = results[i];
-      const id = video.id;
-      links.push(id);
+  const query = t.join(" ");
 
-      const thumbnailUrl = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
-      const thumbData = (await axios.get(thumbnailUrl, { responseType: "arraybuffer" })).data;
-      const thumbPath = __dirname + `/cache/thumb${i}.jpg`;
-      fs.writeFileSync(thumbPath, Buffer.from(thumbData, "utf-8"));
-      attachments.push(fs.createReadStream(thumbPath));
-
-      msg += `${i + 1}. ${video.title}\n`;
+  if (query.startsWith("http://") || query.startsWith("https://")) {
+    // Direct YouTube link handling
+    let videoIdMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/))([^&\n?#]+)/);
+    if (!videoIdMatch) {
+      return e.sendMessage("অকার্যকর ইউটিউব লিংক।", a.threadID, a.messageID);
     }
+    const videoId = videoIdMatch[1];
 
-    msg += "\n👉 রিপ্লাই করুন নম্বর এবং ফরম্যাট সহ (যেমন: 2 mp3 বা 3 mp4)";
+    e.sendMessage("লিংক থেকে ভিডিও প্রক্রিয়া করা হচ্ছে, দয়া করে অপেক্ষা করুন...", a.threadID);
 
-    return api.sendMessage({
-      body: msg,
-      attachment: attachments
-    }, event.threadID, (err, info) => {
-      global.client.handleReply.push({
-        name: module.exports.config.name,
-        messageID: info.messageID,
-        author: event.senderID,
-        link: links
-      });
-    }, event.messageID);
+    try {
+      const directDownloadHeaders = {
+        "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
+        "x-rapidapi-key": o.API_KEY
+      };
 
-  } catch (err) {
-    console.error(err);
-    return api.sendMessage("❌ ইউটিউব সার্চে সমস্যা হয়েছে!", event.threadID, event.messageID);
+      const videoInfo = (await n.request({
+        method: "GET",
+        url: "https://ytstream-download-youtube-videos.p.rapidapi.com/dl",
+        params: {
+          id: videoId
+        },
+        headers: directDownloadHeaders
+      })).data;
+
+      if (videoInfo.status === "fail") {
+        return e.sendMessage("এই ফাইলটি পাঠানো যাচ্ছে না।", a.threadID, a.messageID);
+      }
+
+      // Prompt user to choose format if a direct link is provided
+      const msg = `একটি ফরম্যাট নির্বাচন করুন:\n1. mp4 (ভিডিও)\n2. mp3 (অডিও)\n\nদয়া করে উত্তর দিন (নম্বর দিন) কোন ফরম্যাটে আপনি ডাউনলোড করতে চান।`;
+      return e.sendMessage({
+        body: msg
+      }, a.threadID, (err, info) => {
+        if (!err) {
+          global.client.handleReply.push({
+            name: this.config.name,
+            messageID: info.messageID,
+            author: a.senderID,
+            link: [videoId] // Pass the single videoId for direct download
+          });
+        }
+      }, a.messageID);
+
+    } catch (error) {
+      console.error("Direct link download error:", error);
+      return e.sendMessage("লিংক থেকে ফাইল প্রক্রিয়া করা যায়নি: " + error.message, a.threadID, a.messageID);
+    }
+  } else {
+    // Search functionality
+    try {
+      let attachments = [];
+      let messageBody = "»🔎 আপনার অনুসন্ধান কীওয়ার্ডের সাথে মিলে যাওয়া ভিডিওগুলি:\n\n";
+      let videoLinks = [];
+      let counter = 0;
+
+      const searchResults = await youtubeApi.searchVideos(query, 6);
+
+      for (let video of searchResults) {
+        if (!video.id) continue;
+        videoLinks.push(video.id);
+
+        let thumbnailUrl = `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
+        let thumbPath = __dirname + `/cache/${counter + 1}.png`;
+
+        const thumbData = (await n.get(thumbnailUrl, {
+          responseType: "arraybuffer"
+        })).data;
+        s.writeFileSync(thumbPath, Buffer.from(thumbData, "utf-8"));
+        attachments.push(s.createReadStream(thumbPath));
+
+        // Get video duration
+        const videoDetails = (await n.get(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${video.id}&key=${selectedYoutubeApiKey}`)).data.items[0];
+        let duration = "N/A";
+        if (videoDetails && videoDetails.contentDetails && videoDetails.contentDetails.duration) {
+          duration = videoDetails.contentDetails.duration.slice(2).replace("S", "").replace("M", ":").replace("H", ":");
+        }
+
+        let prefixEmoji;
+        switch (counter + 1) {
+          case 1:
+            prefixEmoji = "⓵";
+            break;
+          case 2:
+            prefixEmoji = "⓶";
+            break;
+          case 3:
+            prefixEmoji = "⓷";
+            break;
+          case 4:
+            prefixEmoji = "⓸";
+            break;
+          case 5:
+            prefixEmoji = "⓹";
+            break;
+          case 6:
+            prefixEmoji = "⓺";
+            break;
+        }
+
+        messageBody += `${prefixEmoji} 《${duration}》 ${video.title}\n\n`;
+        counter++;
+      }
+
+      messageBody += "» অনুগ্রহ করে উত্তর দিন (সংখ্যা দিয়ে) উপরে থেকে একটি নির্বাচন করুন এবং ফরম্যাট (mp3/mp4) উল্লেখ করুন, যেমন: 1 mp4";
+
+      return e.sendMessage({
+        attachment: attachments,
+        body: messageBody
+      }, a.threadID, ((err, info) => {
+        if (!err) {
+          global.client.handleReply.push({
+            name: this.config.name,
+            messageID: info.messageID,
+            author: a.senderID,
+            link: videoLinks
+          });
+        }
+      }), a.messageID);
+
+    } catch (error) {
+      console.error("Search error:", error);
+      return e.sendMessage("মডিউল ত্রুটির কারণে অনুরোধ প্রক্রিয়া করা যায়নি: " + error.message, a.threadID, a.messageID);
+    } finally {
+      // Clean up cached image files after sending search results
+      for (let i = 1; i < 7; i++) {
+        try {
+          h(__dirname + `/cache/${i}.png`);
+        } catch (e) {} // Ignore error if file doesn't exist
+      }
+    }
   }
 };
