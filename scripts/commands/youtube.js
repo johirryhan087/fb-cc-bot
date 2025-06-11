@@ -3,14 +3,17 @@ const fs = require("fs-extra");
 
 module.exports.config = {
   name: "youtube",
-  version: "1.0.0",
-  hasPermssion: 0,
-  credits: "Refined by ChatGPT",
-  description: "YouTube video/audio downloader",
-  commandCategory: "media",
-  usages: "[search term]",
-  cooldowns: 3
+  version: "2.0.0",
+  permission: 0,
+  credits: "Mahir (Modified by OpenAI)",
+  description: "Search & download YouTube videos/audios",
+  prefix: true,
+  category: "Media",
+  usages: "[search query | YouTube link]",
+  cooldowns: 5,
+  dependencies: {}
 };
+
 
 module.exports.run = async ({ api, event, args }) => {
   const query = args.join(" ");
