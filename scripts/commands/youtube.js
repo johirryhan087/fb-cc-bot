@@ -70,7 +70,7 @@ if (!media || !media.url) {
 }
 
 const fileUrl = media.url;
-const filename = ${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")};
+const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
 
     const fileData = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
     const filePath = __dirname + /cache/${filename};
@@ -81,7 +81,7 @@ const filename = ${res.data.result.title}.${media.ext || (format === "audio" ? "
       return api.sendMessage("ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো যাচ্ছে না।", event.threadID, () => unlinkSync(filePath), event.messageID);
     } else {
       return api.sendMessage({
-        body: ${res.data.result.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput}),
+        body: `${res.data.result.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
         attachment: createReadStream(filePath)
       }, event.threadID, () => unlinkSync(filePath), event.messageID);
     }
@@ -116,14 +116,14 @@ module.exports.run = async function ({ api, event, args }) {
     for (let i = 0; i < results.length; i++) {
       const vid = results[i];
       links.push(vid.id);
-      const thumbUrl = https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg;
+      const thumbUrl = `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`;
       const imgPath = __dirname + /cache/${i + 1}.png;
 
       const imgData = (await axios.get(thumbUrl, { responseType: "arraybuffer" })).data;
       fs.writeFileSync(imgPath, Buffer.from(imgData, "utf-8"));
       attachments.push(fs.createReadStream(imgPath));
 
-      const durationRaw = (await axios.get(https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${vid.id}&key=${youtubeKeys[0]})).data.items[0].contentDetails.duration;
+      const durationRaw = (await axios.get(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${vid.id}&key=${youtubeKeys[0]}`)).data.items[0].contentDetails.duration;
       const duration = durationRaw.replace("PT", "").replace("H", ":").replace("M", ":").replace("S", "").replace(/:$/, "");
 
       msg += ${i + 1}. (${duration}) ${vid.title}\n\n;
