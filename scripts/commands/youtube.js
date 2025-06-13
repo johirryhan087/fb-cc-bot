@@ -32,15 +32,8 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
 
   const format = typeMap[typeInput] || "video";
 
-  if (!qualityInput) {
-    qualityInput = format === "audio" ? "128kbps" : "480p";
-  } else {
-    if (format === "video" && !qualityInput.endsWith("p")) {
-      qualityInput += "p";
-    }
-    if (format === "audio" && !qualityInput.endsWith("kbps")) {
-      qualityInput += "kbps";
-    }
+  if (!qualityInput && format === "video") {
+    qualityInput = "480p";
   }
 
   const videoId = handleReply.link[number - 1];
@@ -58,16 +51,19 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
 
     const mediaList = res.data.result.medias;
 
-    // 🔧 Only this section was changed:
-    const qualityNormalized = qualityInput.replace(/\D/g, "");
-
-    const media = mediaList.find(m =>
-      m.type === format &&
-      (
-        (m.quality && m.quality.replace(/\D/g, "").includes(qualityNormalized)) ||
-        (m.label && m.label.replace(/\D/g, "").includes(qualityNormalized))
-      )
-    );
+    let media;
+    if (format === "audio") {
+      media = mediaList.find(m => m.type === "audio");
+    } else {
+      const qualityNormalized = qualityInput.replace(/\D/g, "");
+      media = mediaList.find(m =>
+        m.type === "video" &&
+        (
+          (m.quality && m.quality.replace(/\D/g, "").includes(qualityNormalized)) ||
+          (m.label && m.label.replace(/\D/g, "").includes(qualityNormalized))
+        )
+      );
+    }
 
     if (!media || !media.url) {
       return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
@@ -85,7 +81,7 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
       return api.sendMessage("ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো যাচ্ছে না।", event.threadID, () => unlinkSync(filePath), event.messageID);
     } else {
       return api.sendMessage({
-        body: `${res.data.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
+        body: `${res.data.result.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()}${format === "video" ? ` - ${qualityInput}` : ""})`,
         attachment: createReadStream(filePath)
       }, event.threadID, () => unlinkSync(filePath), event.messageID);
     }
@@ -133,7 +129,7 @@ module.exports.run = async function ({ api, event, args }) {
       msg += `${i + 1}. (${duration}) ${vid.title}\n\n`;
     }
 
-    msg += "উত্তর দিন: নম্বর টাইপ ফরম্যাট কোয়ালিটি (যেমন: 1 vid 720p অথবা 2 aud 192kbps)\n\nভিডিওর জন্য: 3gp/360p/480p/720p/1080p\nঅডিওর জন্য: 128kbps/192kbps/256kbps/320kbps";
+    msg += "উত্তর দিন: নম্বর টাইপ কোয়ালিটি (যেমন: 1 vid 720p অথবা 2 aud)\n\nভিডিও কোয়ালিটি: 144p, 240p, 360p, 480p, 720p, 1080p\nঅডিও ডিফল্ট: 128kbps";
 
     return api.sendMessage({ body: msg, attachment: attachments }, event.threadID, (err, info) => {
       if (!err) {
