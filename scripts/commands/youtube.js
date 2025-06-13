@@ -72,8 +72,6 @@ if (!media || !media.url) {
 const fileUrl = media.url;
 const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
 
-    const filename = decodeURIComponent(res.data.file_path.split("/").pop());
-
     const fileData = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
     const filePath = __dirname + `/cache/${filename}`;
 
