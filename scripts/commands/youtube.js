@@ -32,7 +32,6 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
 
   const format = typeMap[typeInput] || "video";
 
-  // Set default quality if missing
   if (!qualityInput) {
     qualityInput = format === "audio" ? "128kbps" : "480p";
   } else {
@@ -50,27 +49,32 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
   api.sendMessage("আপনার অনুরোধ প্রক্রিয়া করা হচ্ছে, দয়া করুন...", event.threadID);
 
   try {
-const apiUrl = `https://ytdl-api-liart.vercel.app/?url=https://youtu.be/${videoId}`;
-const res = await axios.get(apiUrl);
+    const apiUrl = `https://ytdl-api-liart.vercel.app/?url=https://youtu.be/${videoId}`;
+    const res = await axios.get(apiUrl);
 
-if (!res.data.ok || !res.data.result || !res.data.result.medias) {
-  throw new Error("Download info not found.");
-}
+    if (!res.data.ok || !res.data.result || !res.data.result.medias) {
+      throw new Error("Download info not found.");
+    }
 
-const mediaList = res.data.result.medias;
+    const mediaList = res.data.result.medias;
 
-// Filter by type and quality
-const media = mediaList.find(m => 
-  m.type === format &&
-  (m.quality?.toLowerCase().includes(qualityInput.toLowerCase()) || m.label?.toLowerCase().includes(qualityInput.toLowerCase()))
-);
+    // 🔧 Only this section was changed:
+    const qualityNormalized = qualityInput.replace(/\D/g, "");
 
-if (!media || !media.url) {
-  return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
-}
+    const media = mediaList.find(m =>
+      m.type === format &&
+      (
+        (m.quality && m.quality.replace(/\D/g, "").includes(qualityNormalized)) ||
+        (m.label && m.label.replace(/\D/g, "").includes(qualityNormalized))
+      )
+    );
 
-const fileUrl = media.url;
-const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
+    if (!media || !media.url) {
+      return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
+    }
+
+    const fileUrl = media.url;
+    const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
 
     const fileData = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
     const filePath = __dirname + `/cache/${filename}`;
@@ -81,7 +85,7 @@ const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? 
       return api.sendMessage("ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো যাচ্ছে না।", event.threadID, () => unlinkSync(filePath), event.messageID);
     } else {
       return api.sendMessage({
-        body: `${res.data.result.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
+        body: `${res.data.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
         attachment: createReadStream(filePath)
       }, event.threadID, () => unlinkSync(filePath), event.messageID);
     }
