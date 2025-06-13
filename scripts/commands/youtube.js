@@ -81,7 +81,7 @@ const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? 
       return api.sendMessage("ফাইলটি 25MB এর বেশি হওয়ায় পাঠানো যাচ্ছে না।", event.threadID, () => unlinkSync(filePath), event.messageID);
     } else {
       return api.sendMessage({
-        body: `${res.data.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
+        body: `${res.data.result.title}\nডাউনলোড সম্পন্ন হয়েছে (${format.toUpperCase()} - ${qualityInput})`,
         attachment: createReadStream(filePath)
       }, event.threadID, () => unlinkSync(filePath), event.messageID);
     }
