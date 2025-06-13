@@ -6,7 +6,7 @@ module.exports.config = {
   description: "Search & download YouTube videos/audios",
   prefix: true,
   category: "Media",
-  usages: "[search query | YouTube link]",
+  usages: "[search query]",
   cooldowns: 5,
   dependencies: {}
 };
@@ -32,7 +32,6 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
 
   const format = typeMap[typeInput] || "video";
 
-  // Set default quality if missing
   if (!qualityInput) {
     qualityInput = format === "audio" ? "128kbps" : "480p";
   } else {
@@ -50,30 +49,28 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
   api.sendMessage("আপনার অনুরোধ প্রক্রিয়া করা হচ্ছে, দয়া করুন...", event.threadID);
 
   try {
-const apiUrl = https://ytdl-api-liart.vercel.app/?url=https://youtu.be/${videoId};
-const res = await axios.get(apiUrl);
+    const apiUrl = `https://ytdl-api-liart.vercel.app/?url=https://youtu.be/${videoId}`;
+    const res = await axios.get(apiUrl);
 
-if (!res.data.ok || !res.data.result || !res.data.result.medias) {
-  throw new Error("Download info not found.");
-}
+    if (!res.data.ok || !res.data.result || !res.data.result.medias) {
+      throw new Error("Download info not found.");
+    }
 
-const mediaList = res.data.result.medias;
+    const mediaList = res.data.result.medias;
+    const media = mediaList.find(m =>
+      m.type === format &&
+      (m.quality?.toLowerCase().includes(qualityInput.toLowerCase()) ||
+        m.label?.toLowerCase().includes(qualityInput.toLowerCase()))
+    );
 
-// Filter by type and quality
-const media = mediaList.find(m => 
-  m.type === format &&
-  (m.quality?.toLowerCase().includes(qualityInput.toLowerCase()) || m.label?.toLowerCase().includes(qualityInput.toLowerCase()))
-);
+    if (!media || !media.url) {
+      return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
+    }
 
-if (!media || !media.url) {
-  return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
-}
-
-const fileUrl = media.url;
-const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
-
+    const fileUrl = media.url;
+    const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
     const fileData = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
-    const filePath = __dirname + /cache/${filename};
+    const filePath = `${__dirname}/cache/${filename}`;
 
     writeFileSync(filePath, Buffer.from(fileData, "utf-8"));
 
@@ -117,7 +114,7 @@ module.exports.run = async function ({ api, event, args }) {
       const vid = results[i];
       links.push(vid.id);
       const thumbUrl = `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`;
-      const imgPath = __dirname + /cache/${i + 1}.png;
+      const imgPath = `${__dirname}/cache/${i + 1}.png`;
 
       const imgData = (await axios.get(thumbUrl, { responseType: "arraybuffer" })).data;
       fs.writeFileSync(imgPath, Buffer.from(imgData, "utf-8"));
@@ -126,7 +123,7 @@ module.exports.run = async function ({ api, event, args }) {
       const durationRaw = (await axios.get(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${vid.id}&key=${youtubeKeys[0]}`)).data.items[0].contentDetails.duration;
       const duration = durationRaw.replace("PT", "").replace("H", ":").replace("M", ":").replace("S", "").replace(/:$/, "");
 
-      msg += ${i + 1}. (${duration}) ${vid.title}\n\n;
+      msg += `${i + 1}. (${duration}) ${vid.title}\n\n`;
     }
 
     msg += "উত্তর দিন: নম্বর টাইপ ফরম্যাট কোয়ালিটি (যেমন: 1 vid 720p অথবা 2 aud 192kbps)\n\nভিডিওর জন্য: 3gp/360p/480p/720p/1080p\nঅডিওর জন্য: 128kbps/192kbps/256kbps/320kbps";
