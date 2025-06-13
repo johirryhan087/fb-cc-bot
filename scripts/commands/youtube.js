@@ -50,11 +50,28 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
   api.sendMessage("আপনার অনুরোধ প্রক্রিয়া করা হচ্ছে, দয়া করুন...", event.threadID);
 
   try {
-    const apiUrl = `https://youtubemediapro-production.up.railway.app/api/get/download?url=https://youtu.be/${videoId}&format=${format}&quality=${qualityInput}`;
-    const res = await axios.get(apiUrl);
-    if (!res.data.success) throw new Error("Download link fetch failed.");
+const apiUrl = `https://ytdl-api-liart.vercel.app/?url=https://youtu.be/${videoId}`;
+const res = await axios.get(apiUrl);
 
-    const fileUrl = `https://youtubemediapro-production.up.railway.app${res.data.download_url}`;
+if (!res.data.ok || !res.data.result || !res.data.result.medias) {
+  throw new Error("Download info not found.");
+}
+
+const mediaList = res.data.result.medias;
+
+// Filter by type and quality
+const media = mediaList.find(m => 
+  m.type === format &&
+  (m.quality?.toLowerCase().includes(qualityInput.toLowerCase()) || m.label?.toLowerCase().includes(qualityInput.toLowerCase()))
+);
+
+if (!media || !media.url) {
+  return api.sendMessage("এই ফরম্যাট বা কোয়ালিটিতে মিডিয়া পাওয়া যায়নি।", event.threadID, event.messageID);
+}
+
+const fileUrl = media.url;
+const filename = `${res.data.result.title}.${media.ext || (format === "audio" ? "mp3" : "mp4")}`;
+
     const filename = decodeURIComponent(res.data.file_path.split("/").pop());
 
     const fileData = (await axios.get(fileUrl, { responseType: "arraybuffer" })).data;
